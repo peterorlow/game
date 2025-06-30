@@ -1,43 +1,5 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+```html
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -49,211 +11,227 @@
     button { margin: 5px; padding: 10px; font-size: 16px; }
     input { margin: 5px; padding: 5px; }
     #leaderboard { list-style: none; padding: 0; }
+    #auth { text-align: center; }
   </style>
 </head>
 <body>
-  <h1>Multiplayer Pong</h1>
-  <div id="controls">
-    <button onclick="loginWithGitHub()">Login with GitHub</button>
-    <button onclick="createGame()">Create Game</button>
-    <input id="gameId" placeholder="Game ID">
-    <input id="password" type="password" placeholder="Game Password">
-    <button onclick="joinGame()">Join Game</button>
+  <div id="game">
+    <h1>Multiplayer Pong</h1>
+    <div id="controls">
+      <button onclick="loginWithGitHub()">Login with GitHub</button>
+      <button onclick="createGame()">Create Game</button>
+      <input id="gameId" placeholder="Game ID">
+      <input id="password" type="password" placeholder="Game Password">
+      <button onclick="joinGame()">Join Game</button>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <h2>Leaderboard</h2>
+    <ul id="leaderboard"></ul>
   </div>
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
-  <h2>Leaderboard</h2>
-  <ul id="leaderboard"></ul>
+  <div id="auth" style="display: none;">
+    <h1>Authenticating...</h1>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const supabase = Supabase.createClient('https://your-project.supabase.co', 'your-anon-key');
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    let gameId = null, player = null, gameState = null;
+    const supabase = Supabase.createClient('https://rzinjczlmlbuqifxywuk.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aW5qY3psbWxidXFpZnh5d3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEyNzI5ODUsImV4cCI6MjA2Njg0ODk4NX0.Ar8yorKazkU7ioe5fI4ThyQpL1tmXFTPln7Gre2EQCg');
 
-    // Game constants
-    const PADDLE_WIDTH = 10, PADDLE_HEIGHT = 100, BALL_SIZE = 10, MAX_SCORE = 5;
-    let paddle1Y = 200, paddle2Y = 200;
-
-    // Authentication
-    async function loginWithGitHub() {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-        options: { redirectTo: 'https://game.peterorlowski.com/auth/callback' }
+    // Handle auth callback
+    if (window.location.pathname === '/auth/callback') {
+      document.getElementById('game').style.display = 'none';
+      document.getElementById('auth').style.display = 'block';
+      supabase.auth.getSession().then(({ data, error }) => {
+        if (data.session) {
+          window.location.href = '/';
+        } else {
+          alert('Authentication failed');
+          document.getElementById('auth').innerHTML = '<h1>Authentication Failed</h1><p><a href="/">Return to game</a></p>';
+        }
       });
-      if (error) alert('Login error: ' + error.message);
-    }
+    } else {
+      // Game logic
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d');
+      let gameId = null, player = null, gameState = null;
 
-    // Create game
-    async function createGame() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return alert('Please log in');
-      const password = prompt('Set a password for the game:');
-      if (!password) return alert('Password required');
-      const { data, error } = await supabase
-        .from('games')
-        .insert({ player_1_id: user.id, status: 'waiting', password })
-        .select()
-        .single();
-      if (error) return alert('Error creating game: ' + error.message);
-      gameId = data.id;
-      player = 'X';
-      subscribeToGame(data.id);
-      alert('Game created! ID: ' + data.id);
-    }
+      // Game constants
+      const PADDLE_WIDTH = 10, PADDLE_HEIGHT = 100, BALL_SIZE = 10, MAX_SCORE = 5;
+      let paddle1Y = 200, paddle2Y = 200;
 
-    // Join game
-    async function joinGame() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return alert('Please log in');
-      const id = document.getElementById('gameId').value;
-      const password = document.getElementById('password').value;
-      const { data, error } = await supabase
-        .from('games')
-        .select('*')
-        .eq('id', id)
-        .eq('password', password)
-        .eq('status', 'waiting')
-        .single();
-      if (error || !data) return alert('Invalid game ID or password');
-      const { error: updateError } = await supabase
-        .from('games')
-        .update({ player_2_id: user.id, status: 'active' })
-        .eq('id', id);
-      if (updateError) return alert('Error joining game: ' + updateError.message);
-      gameId = id;
-      player = 'O';
-      subscribeToGame(id);
-      startGame();
-    }
-
-    // Subscribe to game updates
-    function subscribeToGame(id) {
-      supabase
-        .channel(`game:${id}`)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${id}` }, payload => {
-          gameState = payload.new;
-          updateGame();
-        })
-        .subscribe();
-    }
-
-    // Update paddle position
-    async function updatePaddle(y) {
-      if (!gameId || !player || gameState.status !== 'active') return;
-      const update = player === 'X' ? { paddle_1_y: y } : { paddle_2_y: y };
-      const { error } = await supabase
-        .from('games')
-        .update({ ...update, updated_at: new Date().toISOString() })
-        .eq('id', gameId);
-      if (error) console.error('Paddle update error:', error.message);
-    }
-
-    // Game loop (client-side rendering, server updates ball)
-    function updateGame() {
-      if !gameState) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      // Draw paddles
-      ctx.fillStyle = 'white';
-      ctx.fillRect(0, gameState.paddle_1_y, PADDLE_WIDTH, PADDLE_HEIGHT);
-      ctx.fillRect(canvas.width - PADDLE_WIDTH, gameState.paddle_2_y, PADDLE_WIDTH, PADDLE_HEIGHT);
-      // Draw ball
-      ctx.beginPath();
-      ctx.arc(gameState.ball_x, gameState.ball_y, BALL_SIZE / 2, 0, Math.PI * 2);
-      ctx.fill();
-      // Draw scores
-      ctx.font = '30px Arial';
-      ctx.fillText(gameState.score_1, 200, 50);
-      ctx.fillText(gameState.score_2, canvas.width - 200, 50);
-      // Check game status
-      if (gameState.status === 'finished') {
-        alert(`Game Over! Winner: ${gameState.winner}`);
-        updateHighscore(gameState.winner);
-        gameId = null;
-        player = null;
+      // Authentication
+      async function loginWithGitHub() {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'github',
+          options: { redirectTo: 'https://game.peterorlowski.com/auth/callback' }
+        });
+        if (error) alert('Login error: ' + error.message);
       }
-    }
 
-    // Server-side ball update (simulated client-side for smoothness)
-    async function updateBall() {
-      if (!gameId || gameState.status !== 'active') return;
-      let { ball_x, ball_y, ball_dx, ball_dy, score_1, score_2 } = gameState;
-      ball_x += ball_dx;
-      ball_y += ball_dy;
-      // Wall collision
-      if (ball_y <= 0 || ball_y >= canvas.height) ball_dy *= -1;
-      // Paddle collision
-      if (
-        (ball_x <= PADDLE_WIDTH && ball_y >= gameState.paddle_1_y && ball_y <= gameState.paddle_1_y + PADDLE_HEIGHT) ||
-        (ball_x >= canvas.width - PADDLE_WIDTH && ball_y >= gameState.paddle_2_y && ball_y <= gameState.paddle_2_y + PADDLE_HEIGHT)
-      ) {
-        ball_dx *= -1;
+      // Create game
+      async function createGame() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return alert('Please log in');
+        const password = prompt('Set a password for the game:');
+        if (!password) return alert('Password required');
+        const { data, error } = await supabase
+          .from('games')
+          .insert({ player_1_id: user.id, status: 'waiting', password })
+          .select()
+          .single();
+        if (error) return alert('Error creating game: ' + error.message);
+        gameId = data.id;
+        player = 'X';
+        subscribeToGame(data.id);
+        alert('Game created! ID: ' + data.id);
       }
-      // Score
-      let winner = null;
-      if (ball_x <= 0) {
-        score_2 += 1;
-        ball_x = canvas.width / 2;
-        ball_y = canvas.height / 2;
-        ball_dx = 5;
-        if (score_2 >= MAX_SCORE) winner = 'Player 2';
-      } else if (ball_x >= canvas.width) {
-        score_1 += 1;
-        ball_x = canvas.width / 2;
-        ball_y = canvas.height / 2;
-        ball_dx = -5;
-        if (score_1 >= MAX_SCORE) winner = 'Player 1';
-      }
-      const update = {
-        ball_x, ball_y, ball_dx, ball_dy, score_1, score_2,
-        status: winner ? 'finished' : 'active',
-        winner, updated_at: new Date().toISOString()
-      };
-      const { error } = await supabase.from('games').update(update).eq('id', gameId);
-      if (error) console.error('Ball update error:', error.message);
-    }
 
-    // Highscores
-    async function updateHighscore(winner) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && (winner === 'Player 1' && player === 'X' || winner === 'Player 2' && player === 'O')) {
+      // Join game
+      async function joinGame() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return alert('Please log in');
+        const id = document.getElementById('gameId').value;
+        const password = document.getElementById('password').value;
+        const { data, error } = await supabase
+          .from('games')
+          .select('*')
+          .eq('id', id)
+          .eq('password', password)
+          .eq('status', 'waiting')
+          .single();
+        if (error || !data) return alert('Invalid game ID or password');
+        const { error: updateError } = await supabase
+          .from('games')
+          .update({ player_2_id: user.id, status: 'active' })
+          .eq('id', id);
+        if (updateError) return alert('Error joining game: ' + updateError.message);
+        gameId = id;
+        player = 'O';
+        subscribeToGame(id);
+        startGame();
+      }
+
+      // Subscribe to game updates
+      function subscribeToGame(id) {
+        supabase
+          .channel(`game:${id}`)
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${id}` }, payload => {
+            gameState = payload.new;
+            updateGame();
+          })
+          .subscribe();
+      }
+
+      // Update paddle position
+      async function updatePaddle(y) {
+        if (!gameId || !player || gameState.status !== 'active') return;
+        const update = player === 'X' ? { paddle_1_y: y } : { paddle_2_y: y };
         const { error } = await supabase
-          .from('highscores')
-          .insert({ player_name: user.user_metadata.name, score: 1, user_id: user.id });
-        if (error) console.error('Highscore error:', error.message);
+          .from('games')
+          .update({ ...update, updated_at: new Date().toISOString() })
+          .eq('id', gameId);
+        if (error) console.error('Paddle update error:', error.message);
       }
+
+      // Game rendering
+      function updateGame() {
+        if (!gameState) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, gameState.paddle_1_y, PADDLE_WIDTH, PADDLE_HEIGHT);
+        ctx.fillRect(canvas.width - PADDLE_WIDTH, gameState.paddle_2_y, PADDLE_WIDTH, PADDLE_HEIGHT);
+        ctx.beginPath();
+        ctx.arc(gameState.ball_x, gameState.ball_y, BALL_SIZE / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = '30px Arial';
+        ctx.fillText(gameState.score_1, 200, 50);
+        ctx.fillText(gameState.score_2, canvas.width - 200, 50);
+        if (gameState.status === 'finished') {
+          alert(`Game Over! Winner: ${gameState.winner}`);
+          updateHighscore(gameState.winner);
+          gameId = null;
+          player = null;
+        }
+      }
+
+      // Ball update
+      async function updateBall() {
+        if (!gameId || gameState.status !== 'active') return;
+        let { ball_x, ball_y, ball_dx, ball_dy, score_1, score_2 } = gameState;
+        ball_x += ball_dx;
+        ball_y += ball_dy;
+        if (ball_y <= 0 || ball_y >= canvas.height) ball_dy *= -1;
+        if (
+          (ball_x <= PADDLE_WIDTH && ball_y >= gameState.paddle_1_y && ball_y <= gameState.paddle_1_y + PADDLE_HEIGHT) ||
+          (ball_x >= canvas.width - PADDLE_WIDTH && ball_y >= gameState.paddle_2_y && ball_y <= gameState.paddle_2_y + PADDLE_HEIGHT)
+        ) {
+          ball_dx *= -1;
+        }
+        let winner = null;
+        if (ball_x <= 0) {
+          score_2 += 1;
+          ball_x = canvas.width / 2;
+          ball_y = canvas.height / 2;
+          ball_dx = 5;
+          if (score_2 >= MAX_SCORE) winner = 'Player 2';
+        } else if (ball_x >= canvas.width) {
+          score_1 += 1;
+          ball_x = canvas.width / 2;
+          ball_y = canvas.height / 2;
+          ball_dx = -5;
+          if (score_1 >= MAX_SCORE) winner = 'Player 1';
+        }
+        const update = {
+          ball_x, ball_y, ball_dx, ball_dy, score_1, score_2,
+          status: winner ? 'finished' : 'active',
+          winner, updated_at: new Date().toISOString()
+        };
+        const { error } = await supabase.from('games').update(update).eq('id', gameId);
+        if (error) console.error('Ball update error:', error.message);
+      }
+
+      // Highscores
+      async function updateHighscore(winner) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && (winner === 'Player 1' && player === 'X' || winner === 'Player 2' && player === 'O')) {
+          const { error } = await supabase
+            .from('highscores')
+            .insert({ player_name: user.user_metadata.name, score: 1, user_id: user.id });
+          if (error) console.error('Highscore error:', error.message);
+        }
+        getHighscores();
+      }
+
+      async function getHighscores() {
+        const { data, error } = await supabase
+          .from('highscores')
+          .select('player_name, score')
+          .order('score', { ascending: false })
+          .limit(10);
+        if (error) console.error('Highscore fetch error:', error.message);
+        else {
+          document.getElementById('leaderboard').innerHTML = data
+            .map((entry, index) => `<li>${index + 1}. ${entry.player_name}: ${entry.score}</li>`)
+            .join('');
+        }
+      }
+
+      // Start game loop
+      function startGame() {
+        setInterval(() => {
+          if (gameState && gameState.status === 'active') updateBall();
+          updateGame();
+        }, 1000 / 60); // 60 FPS
+      }
+
+      // Paddle movement
+      canvas.addEventListener('mousemove', e => {
+        const y = e.offsetY - PADDLE_HEIGHT / 2;
+        if (y >= 0 && y <= canvas.height - PADDLE_HEIGHT) updatePaddle(y);
+      });
+
+      // Initialize
       getHighscores();
     }
-
-    async function getHighscores() {
-      const { data, error } = await supabase
-        .from('highscores')
-        .select('player_name, score')
-        .order('score', { ascending: false })
-        .limit(10);
-      if (error) console.error('Highscore fetch error:', error.message);
-      else {
-        document.getElementById('leaderboard').innerHTML = data
-          .map((entry, index) => `<li>${index + 1}. ${entry.player_name}: ${entry.score}</li>`)
-          .join('');
-      }
-    }
-
-    // Start game loop
-    function startGame() {
-      setInterval(() => {
-        if (gameState && gameState.status === 'active') updateBall();
-        updateGame();
-      }, 1000 / 60); // 60 FPS
-    }
-
-    // Paddle movement
-    canvas.addEventListener('mousemove', e => {
-      const y = e.offsetY - PADDLE_HEIGHT / 2;
-      if (y >= 0 && y <= canvas.height - PADDLE_HEIGHT) updatePaddle(y);
-    });
-
-    // Initialize
-    getHighscores();
   </script>
 </body>
 </html>
+```
