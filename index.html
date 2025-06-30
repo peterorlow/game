@@ -11,7 +11,8 @@
     input { margin: 5px; padding: 5px; }
     #leaderboard { list-style: none; padding: 0; }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Load Supabase SDK first -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/supabase.js"></script>
 </head>
 <body>
   <h1>Multiplayer Pong</h1>
@@ -26,235 +27,216 @@
   <h2>Leaderboard</h2>
   <ul id="leaderboard"></ul>
 
-
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      // Create the Supabase client from the global `supabase` object provided by the SDK
+      // Create Supabase client here once, using the global 'supabase' from the SDK
       const supabaseClient = supabase.createClient(
         'https://rzinjczlmlbuqifxywuk.supabase.co',
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aW5qY3psbWxidXFpZnh5d3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEyNzI5ODUsImV4cCI6MjA2Njg0ODk4NX0.Ar8yorKazkU7ioe5fI4ThyQpL1tmXFTPln7Gre2EQCg'
       );
 
-      // Now you can use supabaseClient for queries, inserts, etc.
-      // Example: fetch some data on load
-      supabaseClient
-        .from('games')
-        .select('*')
-        .limit(3)
-        .then(({ data, error }) => {
-          if (error) console.error('Error fetching games:', error);
-          else console.log('Games:', data);
-        });
+      // Variables
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d');
+      let gameId = null, player = null, gameState = null, username = null;
+      let gameSubscription = null;
+      let gameOverNotified = false;
 
-      // Expose supabaseClient globally if needed:
-      window.supabaseClient = supabaseClient;
-    });
+      const PADDLE_WIDTH = 10, PADDLE_HEIGHT = 100, BALL_SIZE = 10, MAX_SCORE = 5;
 
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    let gameId = null, player = null, gameState = null, username = null;
-    let gameSubscription = null;
-    let gameOverNotified = false;
+      async function createGame() {
+        username = document.getElementById('username').value.trim();
+        if (!username) return alert('Please enter a username');
+        const password = prompt('Set a password for the game:');
+        if (!password) return alert('Password required');
+        const { data, error } = await supabaseClient
+          .from('games')
+          .insert({
+            player_1_name: username,
+            status: 'waiting',
+            password,
+            paddle_1_y: 250,
+            paddle_2_y: 250,
+            ball_x: 400,
+            ball_y: 300,
+            ball_dx: 5,
+            ball_dy: 3,
+            score_1: 0,
+            score_2: 0,
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        if (error) return alert('Error creating game: ' + error.message);
+        gameId = data.id;
+        player = 'X';
+        subscribeToGame(data.id);
+        alert('Game created! ID: ' + data.id);
+      }
 
-    const PADDLE_WIDTH = 10, PADDLE_HEIGHT = 100, BALL_SIZE = 10, MAX_SCORE = 5;
+      async function joinGame() {
+        username = document.getElementById('username').value.trim();
+        if (!username) return alert('Please enter a username');
+        const id = document.getElementById('gameId').value;
+        const password = document.getElementById('password').value;
+        if (!id || !password) return alert('Please enter game ID and password');
+        const { data, error } = await supabaseClient
+          .from('games')
+          .select('*')
+          .eq('id', id)
+          .eq('password', password)
+          .eq('status', 'waiting')
+          .single();
+        if (error || !data) return alert('Invalid game ID or password');
+        const { error: updateError } = await supabaseClient
+          .from('games')
+          .update({ player_2_name: username, status: 'active' })
+          .eq('id', id);
+        if (updateError) return alert('Error joining game: ' + updateError.message);
+        gameId = id;
+        player = 'O';
+        subscribeToGame(id);
+        startGame();
+      }
 
-    async function createGame() {
-      username = document.getElementById('username').value.trim();
-      if (!username) return alert('Please enter a username');
-      const password = prompt('Set a password for the game:');
-      if (!password) return alert('Password required');
-      const { data, error } = await supabase
-        .from('games')
-        .insert({
-          player_1_name: username,
-          status: 'waiting',
-          password,
-          paddle_1_y: 250,
-          paddle_2_y: 250,
-          ball_x: 400,
-          ball_y: 300,
-          ball_dx: 5,
-          ball_dy: 3,
-          score_1: 0,
-          score_2: 0,
+      function subscribeToGame(id) {
+        if (gameSubscription) {
+          supabaseClient.removeChannel(gameSubscription);
+          gameSubscription = null;
+        }
+        gameSubscription = supabaseClient
+          .channel(`game:${id}`)
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${id}` }, payload => {
+            gameState = payload.new;
+            updateGame();
+            if (gameState.status === 'finished' && !gameOverNotified) {
+              gameOverNotified = true;
+              alert(`Game Over! Winner: ${gameState.winner}`);
+              updateHighscore(gameState.winner);
+              resetGameState();
+            }
+          })
+          .subscribe();
+      }
+
+      function resetGameState() {
+        gameId = null;
+        player = null;
+        username = null;
+        gameState = null;
+        gameOverNotified = false;
+        document.getElementById('username').value = '';
+      }
+
+      async function updatePaddle(y) {
+        if (!gameId || !player || !gameState || gameState.status !== 'active') return;
+        const update = player === 'X' ? { paddle_1_y: y } : { paddle_2_y: y };
+        const { error } = await supabaseClient
+          .from('games')
+          .update({ ...update, updated_at: new Date().toISOString() })
+          .eq('id', gameId);
+        if (error) console.error('Paddle update error:', error.message);
+      }
+
+      function updateGame() {
+        if (!gameState) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, gameState.paddle_1_y, PADDLE_WIDTH, PADDLE_HEIGHT);
+        ctx.fillRect(canvas.width - PADDLE_WIDTH, gameState.paddle_2_y, PADDLE_WIDTH, PADDLE_HEIGHT);
+        ctx.beginPath();
+        ctx.arc(gameState.ball_x, gameState.ball_y, BALL_SIZE / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = '30px Arial';
+        ctx.fillText(gameState.score_1, 200, 50);
+        ctx.fillText(gameState.score_2, canvas.width - 200, 50);
+      }
+
+      async function updateBall() {
+        if (!gameId || !gameState || gameState.status !== 'active' || player !== 'X') return;
+
+        let { ball_x, ball_y, ball_dx, ball_dy, score_1, score_2 } = gameState;
+        ball_x += ball_dx;
+        ball_y += ball_dy;
+
+        if (ball_y <= 0 || ball_y >= canvas.height) ball_dy *= -1;
+
+        if (
+          (ball_x <= PADDLE_WIDTH && ball_y >= gameState.paddle_1_y && ball_y <= gameState.paddle_1_y + PADDLE_HEIGHT) ||
+          (ball_x >= canvas.width - PADDLE_WIDTH && ball_y >= gameState.paddle_2_y && ball_y <= gameState.paddle_2_y + PADDLE_HEIGHT)
+        ) {
+          ball_dx *= -1;
+        }
+
+        let winner = null;
+        if (ball_x <= 0) {
+          score_2 += 1;
+          ball_x = canvas.width / 2;
+          ball_y = canvas.height / 2;
+          ball_dx = 5;
+          if (score_2 >= MAX_SCORE) winner = gameState.player_2_name;
+        } else if (ball_x >= canvas.width) {
+          score_1 += 1;
+          ball_x = canvas.width / 2;
+          ball_y = canvas.height / 2;
+          ball_dx = -5;
+          if (score_1 >= MAX_SCORE) winner = gameState.player_1_name;
+        }
+
+        const update = {
+          ball_x, ball_y, ball_dx, ball_dy, score_1, score_2,
+          status: winner ? 'finished' : 'active',
+          winner,
           updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-      if (error) return alert('Error creating game: ' + error.message);
-      gameId = data.id;
-      player = 'X';
-      subscribeToGame(data.id);
-      alert('Game created! ID: ' + data.id);
-    }
+        };
 
-    async function joinGame() {
-      username = document.getElementById('username').value.trim();
-      if (!username) return alert('Please enter a username');
-      const id = document.getElementById('gameId').value;
-      const password = document.getElementById('password').value;
-      if (!id || !password) return alert('Please enter game ID and password');
-      const { data, error } = await supabase
-        .from('games')
-        .select('*')
-        .eq('id', id)
-        .eq('password', password)
-        .eq('status', 'waiting')
-        .single();
-      if (error || !data) return alert('Invalid game ID or password');
-      const { error: updateError } = await supabase
-        .from('games')
-        .update({ player_2_name: username, status: 'active' })
-        .eq('id', id);
-      if (updateError) return alert('Error joining game: ' + updateError.message);
-      gameId = id;
-      player = 'O';
-      subscribeToGame(id);
-      startGame();
-    }
-
-    function subscribeToGame(id) {
-      // Unsubscribe old
-      if (gameSubscription) {
-        supabase.removeChannel(gameSubscription);
-        gameSubscription = null;
-      }
-      gameSubscription = supabase
-        .channel(`game:${id}`)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${id}` }, payload => {
-          gameState = payload.new;
-          updateGame();
-          if (gameState.status === 'finished' && !gameOverNotified) {
-            gameOverNotified = true;
-            alert(`Game Over! Winner: ${gameState.winner}`);
-            updateHighscore(gameState.winner);
-            resetGameState();
-          }
-        })
-        .subscribe();
-    }
-
-    function resetGameState() {
-      gameId = null;
-      player = null;
-      username = null;
-      gameState = null;
-      gameOverNotified = false;
-      document.getElementById('username').value = '';
-    }
-
-    async function updatePaddle(y) {
-      if (!gameId || !player || !gameState || gameState.status !== 'active') return;
-      const update = player === 'X' ? { paddle_1_y: y } : { paddle_2_y: y };
-      const { error } = await supabase
-        .from('games')
-        .update({ ...update, updated_at: new Date().toISOString() })
-        .eq('id', gameId);
-      if (error) console.error('Paddle update error:', error.message);
-    }
-
-    function updateGame() {
-      if (!gameState) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'white';
-      ctx.fillRect(0, gameState.paddle_1_y, PADDLE_WIDTH, PADDLE_HEIGHT);
-      ctx.fillRect(canvas.width - PADDLE_WIDTH, gameState.paddle_2_y, PADDLE_WIDTH, PADDLE_HEIGHT);
-      ctx.beginPath();
-      ctx.arc(gameState.ball_x, gameState.ball_y, BALL_SIZE / 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.font = '30px Arial';
-      ctx.fillText(gameState.score_1, 200, 50);
-      ctx.fillText(gameState.score_2, canvas.width - 200, 50);
-    }
-
-    async function updateBall() {
-      // Only player 1 controls the ball movement
-      if (!gameId || !gameState || gameState.status !== 'active' || player !== 'X') return;
-
-      let { ball_x, ball_y, ball_dx, ball_dy, score_1, score_2 } = gameState;
-      ball_x += ball_dx;
-      ball_y += ball_dy;
-
-      if (ball_y <= 0 || ball_y >= canvas.height) ball_dy *= -1;
-
-      // Paddle collisions
-      if (
-        (ball_x <= PADDLE_WIDTH && ball_y >= gameState.paddle_1_y && ball_y <= gameState.paddle_1_y + PADDLE_HEIGHT) ||
-        (ball_x >= canvas.width - PADDLE_WIDTH && ball_y >= gameState.paddle_2_y && ball_y <= gameState.paddle_2_y + PADDLE_HEIGHT)
-      ) {
-        ball_dx *= -1;
+        const { error } = await supabaseClient.from('games').update(update).eq('id', gameId);
+        if (error) console.error('Ball update error:', error.message);
       }
 
-      let winner = null;
-
-      if (ball_x <= 0) {
-        score_2 += 1;
-        ball_x = canvas.width / 2;
-        ball_y = canvas.height / 2;
-        ball_dx = 5;
-        if (score_2 >= MAX_SCORE) winner = gameState.player_2_name;
-      } else if (ball_x >= canvas.width) {
-        score_1 += 1;
-        ball_x = canvas.width / 2;
-        ball_y = canvas.height / 2;
-        ball_dx = -5;
-        if (score_1 >= MAX_SCORE) winner = gameState.player_1_name;
+      async function updateHighscore(winner) {
+        if (!winner) return;
+        if ((winner === gameState.player_1_name && player === 'X') || (winner === gameState.player_2_name && player === 'O')) {
+          const { error } = await supabaseClient
+            .from('highscores')
+            .insert({ player_name: winner, score: 1 });
+          if (error) console.error('Highscore error:', error.message);
+        }
+        getHighscores();
       }
 
-      const update = {
-        ball_x, ball_y, ball_dx, ball_dy, score_1, score_2,
-        status: winner ? 'finished' : 'active',
-        winner,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error } = await supabase.from('games').update(update).eq('id', gameId);
-      if (error) console.error('Ball update error:', error.message);
-    }
-
-    async function updateHighscore(winner) {
-      if (!winner) return;
-      if ((winner === gameState.player_1_name && player === 'X') || (winner === gameState.player_2_name && player === 'O')) {
-        const { error } = await supabase
+      async function getHighscores() {
+        const { data, error } = await supabaseClient
           .from('highscores')
-          .insert({ player_name: winner, score: 1 });
-        if (error) console.error('Highscore error:', error.message);
+          .select('player_name, score')
+          .order('score', { ascending: false })
+          .limit(10);
+        if (error) console.error('Highscore fetch error:', error.message);
+        else {
+          document.getElementById('leaderboard').innerHTML = data
+            .map((entry, index) => `<li>${index + 1}. ${entry.player_name}: ${entry.score}</li>`)
+            .join('');
+        }
       }
+
+      function startGame() {
+        setInterval(() => {
+          if (gameState && gameState.status === 'active') updateBall();
+          updateGame();
+        }, 1000 / 60);
+      }
+
+      canvas.addEventListener('mousemove', e => {
+        const y = e.offsetY - PADDLE_HEIGHT / 2;
+        if (y >= 0 && y <= canvas.height - PADDLE_HEIGHT) updatePaddle(y);
+      });
+
+      // Expose these globally so buttons can call them
+      window.createGame = createGame;
+      window.joinGame = joinGame;
+
       getHighscores();
-    }
-
-    async function getHighscores() {
-      const { data, error } = await supabase
-        .from('highscores')
-        .select('player_name, score')
-        .order('score', { ascending: false })
-        .limit(10);
-      if (error) console.error('Highscore fetch error:', error.message);
-      else {
-        document.getElementById('leaderboard').innerHTML = data
-          .map((entry, index) => `<li>${index + 1}. ${entry.player_name}: ${entry.score}</li>`)
-          .join('');
-      }
-    }
-
-    function startGame() {
-      setInterval(() => {
-        if (gameState && gameState.status === 'active') updateBall();
-        updateGame();
-      }, 1000 / 60);
-    }
-
-    canvas.addEventListener('mousemove', e => {
-      const y = e.offsetY - PADDLE_HEIGHT / 2;
-      if (y >= 0 && y <= canvas.height - PADDLE_HEIGHT) updatePaddle(y);
     });
-
-    window.createGame = createGame;
-    window.joinGame = joinGame;
-
-    getHighscores();
-  });
-</script>|
+  </script>
 </body>
 </html>
-
