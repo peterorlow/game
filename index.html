@@ -13,7 +13,6 @@
   </style>
   <!-- Load Supabase SDK first -->
   <script src="https://unpkg.com/@supabase/supabase-js@2/dist/supabase.js"></script>
-
 </head>
 <body>
   <h1>Multiplayer Pong</h1>
@@ -29,12 +28,14 @@
   <ul id="leaderboard"></ul>
 
   <script>
-     window.addEventListener('load', () => {
-    const supabaseClient = supabase.createClient(
+    document.addEventListener("DOMContentLoaded", () => {
+      // Create Supabase client here once, using the global 'supabase' from the SDK
+      const supabaseClient = supabase.createClient(
         'https://rzinjczlmlbuqifxywuk.supabase.co',
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aW5qY3psbWxidXFpZnh5d3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEyNzI5ODUsImV4cCI6MjA2Njg0ODk4NX0.Ar8yorKazkU7ioe5fI4ThyQpL1tmXFTPln7Gre2EQCg'
       );
 
+      // Variables
       const canvas = document.getElementById('gameCanvas');
       const ctx = canvas.getContext('2d');
       let gameId = null, player = null, gameState = null, username = null;
@@ -104,13 +105,13 @@
           gameSubscription = null;
         }
         gameSubscription = supabaseClient
-          .channel(`game:${id}`)
-          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${id}` }, payload => {
+          .channel(game:${id})
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: id=eq.${id} }, payload => {
             gameState = payload.new;
             updateGame();
             if (gameState.status === 'finished' && !gameOverNotified) {
               gameOverNotified = true;
-              alert(`Game Over! Winner: ${gameState.winner}`);
+              alert(Game Over! Winner: ${gameState.winner});
               updateHighscore(gameState.winner);
               resetGameState();
             }
@@ -213,7 +214,7 @@
         if (error) console.error('Highscore fetch error:', error.message);
         else {
           document.getElementById('leaderboard').innerHTML = data
-            .map((entry, index) => `<li>${index + 1}. ${entry.player_name}: ${entry.score}</li>`)
+            .map((entry, index) => <li>${index + 1}. ${entry.player_name}: ${entry.score}</li>)
             .join('');
         }
       }
