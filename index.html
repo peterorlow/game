@@ -27,19 +27,28 @@
   <ul id="leaderboard"></ul>
 
 
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const supabase = supabase.createClient(
-      'https://rzinjczlmlbuqifxywuk.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aW5qY3psbWxidXFpZnh5d3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEyNzI5ODUsImV4cCI6MjA2Njg0ODk4NX0.Ar8yorKazkU7ioe5fI4ThyQpL1tmXFTPln7Gre2EQCg',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-          detectSessionInUrl: false
-        }
-      }
-    );
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Create the Supabase client from the global `supabase` object provided by the SDK
+      const supabaseClient = supabase.createClient(
+        'https://rzinjczlmlbuqifxywuk.supabase.co',
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aW5qY3psbWxidXFpZnh5d3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEyNzI5ODUsImV4cCI6MjA2Njg0ODk4NX0.Ar8yorKazkU7ioe5fI4ThyQpL1tmXFTPln7Gre2EQCg'
+      );
+
+      // Now you can use supabaseClient for queries, inserts, etc.
+      // Example: fetch some data on load
+      supabaseClient
+        .from('games')
+        .select('*')
+        .limit(3)
+        .then(({ data, error }) => {
+          if (error) console.error('Error fetching games:', error);
+          else console.log('Games:', data);
+        });
+
+      // Expose supabaseClient globally if needed:
+      window.supabaseClient = supabaseClient;
+    });
 
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
