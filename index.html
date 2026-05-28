@@ -1,242 +1,871 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Multiplayer Pong</title>
-  <style>
-    body { display: flex; flex-direction: column; align-items: center; font-family: Arial; background: #f0f0f0; }
-    canvas { border: 2px solid black; background: #000; }
-    #controls { margin: 10px; }
-    button { margin: 5px; padding: 10px; font-size: 16px; }
-    input { margin: 5px; padding: 5px; }
-    #leaderboard { list-style: none; padding: 0; }
-  </style>
-  <!-- Load Supabase SDK first -->
-  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/supabase.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Love 💌</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cormorant Garamond:ital,wght@0,300;0,400;1,300&family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<style>
+  :root {
+    --rose: #c8415a;
+    --blush: #f2c4ce;
+    --cream: #fdf6f0;
+    --gold: #c9974a;
+    --deep: #2a1520;
+    --petal: #f8e0e6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--cream);
+    font-family: 'Cormorant Garamond', serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    color: var(--deep);
+    cursor: default;
+  }
+
+  /* PETALS */
+  .petal {
+    position: fixed;
+    width: 12px;
+    height: 16px;
+    background: radial-gradient(ellipse, #f2c4ce, #e8829a88);
+    border-radius: 50% 0 50% 0;
+    pointer-events: none;
+    z-index: 0;
+    animation: fall linear infinite;
+    opacity: 0;
+  }
+  @keyframes fall {
+    0%   { transform: translateY(-40px) rotate(0deg) translateX(0); opacity: 0; }
+    10%  { opacity: 0.8; }
+    90%  { opacity: 0.5; }
+    100% { transform: translateY(110vh) rotate(540deg) translateX(60px); opacity: 0; }
+  }
+
+  /* PAGES */
+  .page {
+    display: none;
+    min-height: 100vh;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    text-align: center;
+    padding: 2rem;
+    position: relative;
+    z-index: 1;
+  }
+  .page.active { display: flex; }
+
+  /* ============================
+     PAGE 0: ENVELOPE
+  ============================ */
+  #page-envelope {
+    background: linear-gradient(160deg, #fff0f3 0%, #fce4ec 50%, #fff9f0 100%);
+  }
+
+  .envelope-hint {
+    font-family: 'Dancing Script', cursive;
+    font-size: 1.8rem;
+    color: var(--rose);
+    margin-bottom: 2.5rem;
+    animation: pulse-hint 2s ease-in-out infinite;
+    letter-spacing: 0.02em;
+  }
+  @keyframes pulse-hint {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.7; transform: scale(1.03); }
+  }
+
+  .envelope-wrap {
+    cursor: pointer;
+    position: relative;
+    width: 220px;
+    height: 160px;
+    filter: drop-shadow(0 8px 32px #c8415a44);
+    transition: transform 0.3s ease;
+    animation: float 3s ease-in-out infinite;
+  }
+  .envelope-wrap:hover { transform: scale(1.06) rotate(-1deg); }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-10px); }
+  }
+
+  /* Envelope SVG shakes on hover */
+  .envelope-wrap:hover { animation: shake 0.4s ease; }
+  @keyframes shake {
+    0%,100% { transform: rotate(0deg) scale(1.06); }
+    25%      { transform: rotate(-3deg) scale(1.06); }
+    75%      { transform: rotate(3deg) scale(1.06); }
+  }
+
+  .hearts-around {
+    position: absolute;
+    width: 340px;
+    height: 260px;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .h-dot {
+    position: absolute;
+    font-size: 1.2rem;
+    animation: orbit 6s linear infinite;
+    opacity: 0.6;
+  }
+  @keyframes orbit {
+    from { transform: rotate(var(--start)) translateX(130px) rotate(calc(-1 * var(--start))); }
+    to   { transform: rotate(calc(var(--start) + 360deg)) translateX(130px) rotate(calc(-1 * (var(--start) + 360deg))); }
+  }
+
+  /* ============================
+     PAGE 1: WILL YOU DATE ME
+  ============================ */
+  #page-question {
+    background: linear-gradient(135deg, #fff0f3 0%, #fdf6f0 100%);
+  }
+  .letter-card {
+    background: white;
+    border-radius: 4px;
+    padding: 3rem 3.5rem;
+    max-width: 500px;
+    box-shadow: 0 4px 40px #c8415a22, 0 0 0 1px #f2c4ce;
+    position: relative;
+    animation: unfold 0.6s cubic-bezier(.22,.61,.36,1);
+  }
+  @keyframes unfold {
+    from { transform: scaleY(0.2) translateY(-40px); opacity: 0; }
+    to   { transform: scaleY(1) translateY(0); opacity: 1; }
+  }
+  .letter-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 5px;
+    background: linear-gradient(90deg, var(--blush), var(--rose), var(--gold), var(--rose), var(--blush));
+  }
+  .letter-title {
+    font-family: 'Dancing Script', cursive;
+    font-size: 2.2rem;
+    color: var(--rose);
+    margin-bottom: 1rem;
+  }
+  .letter-body {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.25rem;
+    font-style: italic;
+    color: #6b3045;
+    line-height: 1.7;
+    margin-bottom: 2.2rem;
+  }
+
+  .btn-row { display: flex; gap: 1.2rem; justify-content: center; align-items: center; flex-wrap: wrap; }
+
+  .btn-yes {
+    background: linear-gradient(135deg, #c8415a, #a82f46);
+    color: white;
+    border: none;
+    padding: 0.85rem 2.4rem;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.2rem;
+    font-style: italic;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px #c8415a55;
+    transition: transform 0.2s, box-shadow 0.2s;
+    letter-spacing: 0.05em;
+  }
+  .btn-yes:hover { transform: scale(1.08); box-shadow: 0 6px 30px #c8415a88; }
+
+  .btn-no {
+    background: #e8d5d8;
+    color: #b08090;
+    border: none;
+    padding: 0.7rem 1.6rem;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1rem;
+    font-style: italic;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: absolute;
+  }
+
+  /* ============================
+     PAGE 2: PICK A DATE VENUE
+  ============================ */
+  #page-venue {
+    background: linear-gradient(160deg, #fff9f0 0%, #fce4ec 100%);
+  }
+
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    color: var(--rose);
+    margin-bottom: 0.5rem;
+  }
+  .section-sub {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 1.15rem;
+    color: #9b5068;
+    margin-bottom: 2.5rem;
+  }
+
+  .venue-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.2rem;
+    max-width: 720px;
+    margin: 0 auto 2.5rem;
+  }
+  @media (max-width: 600px) { .venue-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .venue-card {
+    background: white;
+    border: 2px solid #f2c4ce;
+    border-radius: 16px;
+    padding: 1.5rem 1rem;
+    cursor: pointer;
+    transition: all 0.22s;
+    box-shadow: 0 2px 12px #c8415a11;
+  }
+  .venue-card:hover { border-color: var(--rose); transform: translateY(-4px); box-shadow: 0 8px 24px #c8415a22; }
+  .venue-card.selected {
+    background: linear-gradient(135deg, #fff0f3, #fce4ec);
+    border-color: var(--rose);
+    box-shadow: 0 0 0 4px #f2c4ce88, 0 8px 24px #c8415a22;
+  }
+  .venue-icon { font-size: 2.6rem; display: block; margin-bottom: 0.6rem; }
+  .venue-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.05rem;
+    color: var(--deep);
+  }
+  .venue-desc {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 0.9rem;
+    color: #9b5068;
+    margin-top: 0.3rem;
+  }
+
+  /* ============================
+     PAGE 3: DATE & TIME
+  ============================ */
+  #page-datetime {
+    background: linear-gradient(160deg, #fff0f3 0%, #fff9f0 100%);
+  }
+
+  .datetime-card {
+    background: white;
+    border-radius: 20px;
+    padding: 2.5rem 3rem;
+    max-width: 440px;
+    width: 100%;
+    box-shadow: 0 4px 40px #c8415a1a, 0 0 0 1px #f2c4ce;
+    margin-bottom: 2rem;
+  }
+
+  .dt-label {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.05rem;
+    color: var(--rose);
+    display: block;
+    margin-bottom: 0.5rem;
+    text-align: left;
+  }
+  .dt-input {
+    width: 100%;
+    border: 1.5px solid #f2c4ce;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.1rem;
+    color: var(--deep);
+    margin-bottom: 1.4rem;
+    outline: none;
+    transition: border 0.2s;
+    background: var(--cream);
+  }
+  .dt-input:focus { border-color: var(--rose); }
+
+  /* Time slots */
+  .time-slots { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-bottom: 1.4rem; }
+  .time-slot {
+    padding: 0.5rem 1rem;
+    border: 1.5px solid #f2c4ce;
+    border-radius: 50px;
+    cursor: pointer;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1rem;
+    color: #9b5068;
+    transition: all 0.18s;
+    background: white;
+  }
+  .time-slot:hover { border-color: var(--rose); color: var(--rose); }
+  .time-slot.selected { background: var(--rose); color: white; border-color: var(--rose); }
+
+  /* ============================
+     PAGE 4: SNACKS & DRINKS
+  ============================ */
+  #page-snacks {
+    background: linear-gradient(160deg, #fff9f0 0%, #fce4ec 100%);
+  }
+
+  .snack-section { max-width: 660px; width: 100%; margin-bottom: 2rem; }
+  .snack-section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.4rem;
+    color: var(--rose);
+    margin-bottom: 1rem;
+    text-align: left;
+  }
+  .snack-grid { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+  .snack-chip {
+    background: white;
+    border: 1.5px solid #f2c4ce;
+    border-radius: 50px;
+    padding: 0.5rem 1.2rem;
+    cursor: pointer;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.05rem;
+    color: #7a3a50;
+    transition: all 0.18s;
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+  .snack-chip:hover { border-color: var(--rose); transform: scale(1.04); }
+  .snack-chip.selected { background: linear-gradient(135deg, #fce4ec, #fff0f3); border-color: var(--rose); color: var(--rose); font-weight: 700; }
+
+  /* ============================
+     PAGE 5: CONFIRM
+  ============================ */
+  #page-confirm {
+    background: linear-gradient(160deg, #fff0f3 0%, #fdf6f0 100%);
+  }
+  .confirm-card {
+    background: white;
+    border-radius: 20px;
+    padding: 2.5rem 3rem;
+    max-width: 520px;
+    width: 100%;
+    box-shadow: 0 4px 40px #c8415a1a, 0 0 0 1px #f2c4ce;
+    position: relative;
+    overflow: hidden;
+  }
+  .confirm-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 6px;
+    background: linear-gradient(90deg, var(--blush), var(--rose), var(--gold), var(--rose), var(--blush));
+  }
+  .confirm-title {
+    font-family: 'Dancing Script', cursive;
+    font-size: 2.4rem;
+    color: var(--rose);
+    margin-bottom: 0.3rem;
+  }
+  .confirm-sub {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    color: #9b5068;
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+  }
+  .confirm-row {
+    display: flex; align-items: flex-start; gap: 1rem;
+    border-bottom: 1px dashed #f2c4ce;
+    padding: 0.8rem 0;
+    text-align: left;
+  }
+  .confirm-row:last-of-type { border-bottom: none; }
+  .confirm-icon { font-size: 1.5rem; flex-shrink: 0; margin-top: 0.1rem; }
+  .confirm-key {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.9rem;
+    color: var(--gold);
+    display: block;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+  .confirm-val {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.15rem;
+    color: var(--deep);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #c8415a, #a82f46);
+    color: white;
+    border: none;
+    padding: 0.9rem 2.8rem;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.2rem;
+    font-style: italic;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px #c8415a44;
+    transition: transform 0.2s, box-shadow 0.2s;
+    letter-spacing: 0.05em;
+    margin-top: 1.5rem;
+  }
+  .btn-primary:hover { transform: scale(1.06); box-shadow: 0 6px 30px #c8415a77; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* CONFETTI */
+  .confetti-piece {
+    position: fixed;
+    width: 10px; height: 10px;
+    pointer-events: none;
+    z-index: 9999;
+    border-radius: 2px;
+    animation: confetti-fall 2.5s ease-in forwards;
+  }
+  @keyframes confetti-fall {
+    0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+  }
+
+  /* PROGRESS DOTS */
+  .progress-dots {
+    position: fixed;
+    bottom: 1.8rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 0.5rem;
+    z-index: 100;
+  }
+  .progress-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #f2c4ce;
+    transition: background 0.3s, transform 0.3s;
+  }
+  .progress-dot.active { background: var(--rose); transform: scale(1.3); }
+
+  /* FINAL THANK YOU */
+  #page-final {
+    background: linear-gradient(135deg, #fff0f3, #fce4ec);
+  }
+  .final-heart {
+    font-size: 5rem;
+    animation: heartbeat 1.2s ease-in-out infinite;
+  }
+  @keyframes heartbeat {
+    0%,100% { transform: scale(1); }
+    50%      { transform: scale(1.15); }
+  }
+  .final-title {
+    font-family: 'Dancing Script', cursive;
+    font-size: 3rem;
+    color: var(--rose);
+    margin: 1rem 0 0.5rem;
+  }
+  .final-msg {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 1.3rem;
+    color: #7a3a50;
+    max-width: 360px;
+    line-height: 1.6;
+  }
+</style>
 </head>
 <body>
-  <h1>Multiplayer Pong</h1>
-  <div id="controls">
-    <input id="username" placeholder="Your Username" required>
-    <button onclick="createGame()">Create Game</button>
-    <input id="gameId" placeholder="Game ID">
-    <input id="password" type="password" placeholder="Game Password">
-    <button onclick="joinGame()">Join Game</button>
+
+<!-- Falling petals -->
+<div id="petals"></div>
+
+<!-- Progress Dots (hidden on envelope/final) -->
+<div class="progress-dots" id="progressDots">
+  <div class="progress-dot" data-page="1"></div>
+  <div class="progress-dot" data-page="2"></div>
+  <div class="progress-dot" data-page="3"></div>
+  <div class="progress-dot" data-page="4"></div>
+  <div class="progress-dot" data-page="5"></div>
+</div>
+
+<!-- ===== PAGE 0: ENVELOPE ===== -->
+<div class="page active" id="page-envelope">
+  <p class="envelope-hint">Click the envelope to open 💌</p>
+  <div style="position:relative;display:inline-block;">
+    <div class="hearts-around" id="heartRing"></div>
+    <div class="envelope-wrap" onclick="openEnvelope()">
+      <svg viewBox="0 0 220 160" xmlns="http://www.w3.org/2000/svg" width="220" height="160">
+        <!-- envelope body -->
+        <rect width="220" height="160" rx="10" fill="#fff5f7" stroke="#f2c4ce" stroke-width="2"/>
+        <!-- back flap open -->
+        <polygon points="0,0 110,85 220,0" fill="#fce4ec" stroke="#f2c4ce" stroke-width="1.5"/>
+        <!-- left fold -->
+        <polygon points="0,0 0,160 90,85" fill="#fdf0f3" stroke="#f2c4ce" stroke-width="1"/>
+        <!-- right fold -->
+        <polygon points="220,0 220,160 130,85" fill="#fdf0f3" stroke="#f2c4ce" stroke-width="1"/>
+        <!-- bottom fold -->
+        <polygon points="0,160 220,160 110,80" fill="#fff0f3" stroke="#f2c4ce" stroke-width="1"/>
+        <!-- heart seal -->
+        <text x="110" y="115" text-anchor="middle" font-size="30" fill="#c8415a">♥</text>
+        <!-- wax circle -->
+        <circle cx="110" cy="108" r="22" fill="none" stroke="#c8415a" stroke-width="1.5" opacity="0.4"/>
+      </svg>
+    </div>
   </div>
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
-  <h2>Leaderboard</h2>
-  <ul id="leaderboard"></ul>
+</div>
 
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      // Create Supabase client here once, using the global 'supabase' from the SDK
-      const supabaseClient = supabase.createClient(
-        'https://rzinjczlmlbuqifxywuk.supabase.co',
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aW5qY3psbWxidXFpZnh5d3VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEyNzI5ODUsImV4cCI6MjA2Njg0ODk4NX0.Ar8yorKazkU7ioe5fI4ThyQpL1tmXFTPln7Gre2EQCg'
-      );
+<!-- ===== PAGE 1: WILL YOU DATE ME ===== -->
+<div class="page" id="page-question">
+  <div class="letter-card">
+    <div class="letter-title">My Darling,</div>
+    <p class="letter-body">
+      You make every ordinary moment feel like a scene from a love story.<br><br>
+      I've been planning something special — just for us. But first I need to know…
+    </p>
+    <p style="font-family:'Playfair Display',serif;font-size:1.7rem;color:var(--rose);margin-bottom:1.8rem;">
+      Will you go on a date with me? 🌹
+    </p>
+    <div class="btn-row" style="position:relative;min-height:55px;" id="btnRow">
+      <button class="btn-yes" onclick="goToPage('page-venue')">Yes, absolutely! 💕</button>
+      <button class="btn-no" id="btnNo" onmouseover="moveNo()" ontouchstart="moveNo()">No</button>
+    </div>
+  </div>
+</div>
 
-      // Variables
-      const canvas = document.getElementById('gameCanvas');
-      const ctx = canvas.getContext('2d');
-      let gameId = null, player = null, gameState = null, username = null;
-      let gameSubscription = null;
-      let gameOverNotified = false;
+<!-- ===== PAGE 2: VENUE ===== -->
+<div class="page" id="page-venue">
+  <h2 class="section-title">Where shall we go?</h2>
+  <p class="section-sub">Pick our perfect date night destination</p>
+  <div class="venue-grid" id="venueGrid">
+    <div class="venue-card" onclick="selectVenue(this,'🎳','Bowling','A night of strikes & laughter')">
+      <span class="venue-icon">🎳</span>
+      <div class="venue-name">Bowling</div>
+      <div class="venue-desc">Strikes & laughter</div>
+    </div>
+    <div class="venue-card" onclick="selectVenue(this,'🎬','Movies','Cuddle up in the dark')">
+      <span class="venue-icon">🎬</span>
+      <div class="venue-name">Movies</div>
+      <div class="venue-desc">Cuddle up in the dark</div>
+    </div>
+    <div class="venue-card" onclick="selectVenue(this,'🍽️','Fine Dining','A romantic dinner for two')">
+      <span class="venue-icon">🍽️</span>
+      <div class="venue-name">Fine Dining</div>
+      <div class="venue-desc">A romantic dinner for two</div>
+    </div>
+    <div class="venue-card" onclick="selectVenue(this,'🌿','Picnic in the Park','Under the open sky')">
+      <span class="venue-icon">🌿</span>
+      <div class="venue-name">Picnic</div>
+      <div class="venue-desc">Under the open sky</div>
+    </div>
+    <div class="venue-card" onclick="selectVenue(this,'🎨','Paint & Sip','Creative & cosy')">
+      <span class="venue-icon">🎨</span>
+      <div class="venue-name">Paint & Sip</div>
+      <div class="venue-desc">Creative & cosy</div>
+    </div>
+    <div class="venue-card" onclick="selectVenue(this,'🎡','Carnival','Lights, rides & fairy floss')">
+      <span class="venue-icon">🎡</span>
+      <div class="venue-name">Carnival</div>
+      <div class="venue-desc">Lights & fairy floss</div>
+    </div>
+  </div>
+  <button class="btn-primary" id="btnVenueNext" disabled onclick="goToPage('page-datetime')">Next →</button>
+</div>
 
-      const PADDLE_WIDTH = 10, PADDLE_HEIGHT = 100, BALL_SIZE = 10, MAX_SCORE = 5;
+<!-- ===== PAGE 3: DATE & TIME ===== -->
+<div class="page" id="page-datetime">
+  <h2 class="section-title">When shall I pick you up?</h2>
+  <p class="section-sub">Choose a date & time, my love</p>
+  <div class="datetime-card">
+    <label class="dt-label">📅 Pick a date</label>
+    <input class="dt-input" type="date" id="dateInput" oninput="checkDateTime()">
+    <label class="dt-label">⏰ What time suits you?</label>
+    <input class="dt-input" type="time" id="timeInput" oninput="checkDateTime()" style="margin-bottom:0.4rem;">
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:0.95rem;color:#b07888;margin-bottom:1.4rem;">Type or scroll to pick any time you like 🕐</p>
+  </div>
+  <button class="btn-primary" id="btnDateNext" disabled onclick="goToPage('page-snacks')">Next →</button>
+</div>
 
-      async function createGame() {
-        username = document.getElementById('username').value.trim();
-        if (!username) return alert('Please enter a username');
-        const password = prompt('Set a password for the game:');
-        if (!password) return alert('Password required');
-        const { data, error } = await supabaseClient
-          .from('games')
-          .insert({
-            player_1_name: username,
-            status: 'waiting',
-            password,
-            paddle_1_y: 250,
-            paddle_2_y: 250,
-            ball_x: 400,
-            ball_y: 300,
-            ball_dx: 5,
-            ball_dy: 3,
-            score_1: 0,
-            score_2: 0,
-            updated_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-        if (error) return alert('Error creating game: ' + error.message);
-        gameId = data.id;
-        player = 'X';
-        subscribeToGame(data.id);
-        alert('Game created! ID: ' + data.id);
-      }
+<!-- ===== PAGE 4: SNACKS & DRINKS ===== -->
+<div class="page" id="page-snacks">
+  <h2 class="section-title">Snacks & Drinks</h2>
+  <p class="section-sub">Pick your favourites for the night 🍿</p>
 
-      async function joinGame() {
-        username = document.getElementById('username').value.trim();
-        if (!username) return alert('Please enter a username');
-        const id = document.getElementById('gameId').value;
-        const password = document.getElementById('password').value;
-        if (!id || !password) return alert('Please enter game ID and password');
-        const { data, error } = await supabaseClient
-          .from('games')
-          .select('*')
-          .eq('id', id)
-          .eq('password', password)
-          .eq('status', 'waiting')
-          .single();
-        if (error || !data) return alert('Invalid game ID or password');
-        const { error: updateError } = await supabaseClient
-          .from('games')
-          .update({ player_2_name: username, status: 'active' })
-          .eq('id', id);
-        if (updateError) return alert('Error joining game: ' + updateError.message);
-        gameId = id;
-        player = 'O';
-        subscribeToGame(id);
-        startGame();
-      }
+  <div class="snack-section">
+    <div class="snack-section-title">🍿 Snacks</div>
+    <div class="snack-grid" id="snackGrid">
+      <div class="snack-chip" onclick="toggleChip(this,'snack')">🍿 Popcorn</div>
+      <div class="snack-chip" onclick="toggleChip(this,'snack')">🍫 Chocolate</div>
+      <div class="snack-chip" onclick="toggleChip(this,'snack')">🧁 Cupcakes</div>
+      <div class="snack-chip" onclick="toggleChip(this,'snack')">🍓 Strawberries</div>
+      <div class="snack-chip" onclick="toggleChip(this,'snack')">🧀 Cheese Board</div>
+      <div class="snack-chip" onclick="toggleChip(this,'snack')">🍪 Cookies</div>
+      <div class="snack-chip" onclick="toggleChip(this,'snack')">🥨 Pretzels</div>
+      <div class="snack-chip" onclick="toggleChip(this,'snack')">🍦 Ice Cream</div>
+    </div>
+  </div>
 
-      function subscribeToGame(id) {
-        if (gameSubscription) {
-          supabaseClient.removeChannel(gameSubscription);
-          gameSubscription = null;
-        }
-        gameSubscription = supabaseClient
-          .channel(game:${id})
-          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: id=eq.${id} }, payload => {
-            gameState = payload.new;
-            updateGame();
-            if (gameState.status === 'finished' && !gameOverNotified) {
-              gameOverNotified = true;
-              alert(Game Over! Winner: ${gameState.winner});
-              updateHighscore(gameState.winner);
-              resetGameState();
-            }
-          })
-          .subscribe();
-      }
+  <div class="snack-section">
+    <div class="snack-section-title">🥂 Drinks</div>
+    <div class="snack-grid" id="drinkGrid">
+      <div class="snack-chip" onclick="toggleChip(this,'drink')">🍷 Red Wine</div>
+      <div class="snack-chip" onclick="toggleChip(this,'drink')">🥂 Champagne</div>
+      <div class="snack-chip" onclick="toggleChip(this,'drink')">🍹 Cocktail</div>
+      <div class="snack-chip" onclick="toggleChip(this,'drink')">🧃 Juice</div>
+      <div class="snack-chip" onclick="toggleChip(this,'drink')">☕ Coffee</div>
+      <div class="snack-chip" onclick="toggleChip(this,'drink')">🧋 Bubble Tea</div>
+      <div class="snack-chip" onclick="toggleChip(this,'drink')">🫖 Herbal Tea</div>
+      <div class="snack-chip" onclick="toggleChip(this,'drink')">💧 Sparkling Water</div>
+    </div>
+  </div>
 
-      function resetGameState() {
-        gameId = null;
-        player = null;
-        username = null;
-        gameState = null;
-        gameOverNotified = false;
-        document.getElementById('username').value = '';
-      }
+  <button class="btn-primary" onclick="buildConfirm()">Review My Date Night →</button>
+</div>
 
-      async function updatePaddle(y) {
-        if (!gameId || !player || !gameState || gameState.status !== 'active') return;
-        const update = player === 'X' ? { paddle_1_y: y } : { paddle_2_y: y };
-        const { error } = await supabaseClient
-          .from('games')
-          .update({ ...update, updated_at: new Date().toISOString() })
-          .eq('id', gameId);
-        if (error) console.error('Paddle update error:', error.message);
-      }
+<!-- ===== PAGE 5: CONFIRM ===== -->
+<div class="page" id="page-confirm">
+  <div style="text-align:center;margin-bottom:1.2rem;">
+    <span style="font-size:2rem;">✨</span>
+    <h2 class="section-title">Confirm Your Date Night</h2>
+    <p class="section-sub">Everything looks perfect — let's make it official!</p>
+  </div>
+  <div class="confirm-card">
+    <div class="confirm-title">Date Night Summary</div>
+    <p class="confirm-sub">Planned with all my love 💕</p>
 
-      function updateGame() {
-        if (!gameState) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, gameState.paddle_1_y, PADDLE_WIDTH, PADDLE_HEIGHT);
-        ctx.fillRect(canvas.width - PADDLE_WIDTH, gameState.paddle_2_y, PADDLE_WIDTH, PADDLE_HEIGHT);
-        ctx.beginPath();
-        ctx.arc(gameState.ball_x, gameState.ball_y, BALL_SIZE / 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.font = '30px Arial';
-        ctx.fillText(gameState.score_1, 200, 50);
-        ctx.fillText(gameState.score_2, canvas.width - 200, 50);
-      }
+    <div class="confirm-row">
+      <span class="confirm-icon" id="c-icon">🎳</span>
+      <div>
+        <span class="confirm-key">Destination</span>
+        <span class="confirm-val" id="c-venue">—</span>
+      </div>
+    </div>
+    <div class="confirm-row">
+      <span class="confirm-icon">📅</span>
+      <div>
+        <span class="confirm-key">Date</span>
+        <span class="confirm-val" id="c-date">—</span>
+      </div>
+    </div>
+    <div class="confirm-row">
+      <span class="confirm-icon">⏰</span>
+      <div>
+        <span class="confirm-key">Pick-up Time</span>
+        <span class="confirm-val" id="c-time">—</span>
+      </div>
+    </div>
+    <div class="confirm-row">
+      <span class="confirm-icon">🍿</span>
+      <div>
+        <span class="confirm-key">Snacks</span>
+        <span class="confirm-val" id="c-snacks">—</span>
+      </div>
+    </div>
+    <div class="confirm-row">
+      <span class="confirm-icon">🥂</span>
+      <div>
+        <span class="confirm-key">Drinks</span>
+        <span class="confirm-val" id="c-drinks">—</span>
+      </div>
+    </div>
 
-      async function updateBall() {
-        if (!gameId || !gameState || gameState.status !== 'active' || player !== 'X') return;
+    <button class="btn-primary" id="btnConfirm" onclick="finalConfirm()" style="width:100%;justify-content:center;display:block;">
+      💌 Confirm Our Date Night!
+    </button>
+    <p id="sendStatus" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1rem;color:#9b5068;margin-top:1rem;min-height:1.4rem;"></p>
+  </div>
+</div>
 
-        let { ball_x, ball_y, ball_dx, ball_dy, score_1, score_2 } = gameState;
-        ball_x += ball_dx;
-        ball_y += ball_dy;
+<!-- ===== PAGE FINAL ===== -->
+<div class="page" id="page-final">
+  <div class="final-heart">💕</div>
+  <div class="final-title">It's a date!</div>
+  <p class="final-msg">I cannot wait to spend this time with you. Get ready to be swept off your feet. ✨</p>
+</div>
 
-        if (ball_y <= 0 || ball_y >= canvas.height) ball_dy *= -1;
+<script>
+// ========= EMAILJS INIT =========
+emailjs.init('VSr4XpXDiTALPqgI9');
 
-        if (
-          (ball_x <= PADDLE_WIDTH && ball_y >= gameState.paddle_1_y && ball_y <= gameState.paddle_1_y + PADDLE_HEIGHT) ||
-          (ball_x >= canvas.width - PADDLE_WIDTH && ball_y >= gameState.paddle_2_y && ball_y <= gameState.paddle_2_y + PADDLE_HEIGHT)
-        ) {
-          ball_dx *= -1;
-        }
+// ========= STATE =========
+const state = {
+  venue: null, venueIcon: null,
+  date: null, time: null,
+  snacks: [], drinks: []
+};
 
-        let winner = null;
-        if (ball_x <= 0) {
-          score_2 += 1;
-          ball_x = canvas.width / 2;
-          ball_y = canvas.height / 2;
-          ball_dx = 5;
-          if (score_2 >= MAX_SCORE) winner = gameState.player_2_name;
-        } else if (ball_x >= canvas.width) {
-          score_1 += 1;
-          ball_x = canvas.width / 2;
-          ball_y = canvas.height / 2;
-          ball_dx = -5;
-          if (score_1 >= MAX_SCORE) winner = gameState.player_1_name;
-        }
+// ========= PETALS =========
+(function() {
+  const wrap = document.getElementById('petals');
+  for (let i = 0; i < 18; i++) {
+    const p = document.createElement('div');
+    p.className = 'petal';
+    p.style.left = Math.random() * 100 + 'vw';
+    p.style.animationDuration = (6 + Math.random() * 8) + 's';
+    p.style.animationDelay = (Math.random() * 10) + 's';
+    p.style.width = (8 + Math.random() * 10) + 'px';
+    p.style.height = (10 + Math.random() * 14) + 'px';
+    const hue = 330 + Math.random() * 30;
+    p.style.background = `radial-gradient(ellipse, hsl(${hue},80%,80%), hsl(${hue},70%,70%))`;
+    wrap.appendChild(p);
+  }
+})();
 
-        const update = {
-          ball_x, ball_y, ball_dx, ball_dy, score_1, score_2,
-          status: winner ? 'finished' : 'active',
-          winner,
-          updated_at: new Date().toISOString()
-        };
+// ========= ORBIT HEARTS =========
+(function() {
+  const ring = document.getElementById('heartRing');
+  const emojis = ['💕','✨','🌸','💫','🌷','💖'];
+  emojis.forEach((e,i) => {
+    const h = document.createElement('div');
+    h.className = 'h-dot';
+    const angle = (i / emojis.length) * 360;
+    h.style.setProperty('--start', angle + 'deg');
+    h.style.animationDelay = (i * 0.8) + 's';
+    h.style.top = '50%'; h.style.left = '50%';
+    h.style.transform = `rotate(${angle}deg) translateX(130px) rotate(-${angle}deg)`;
+    h.textContent = e;
+    ring.appendChild(h);
+  });
+})();
 
-        const { error } = await supabaseClient.from('games').update(update).eq('id', gameId);
-        if (error) console.error('Ball update error:', error.message);
-      }
+// ========= ENVELOPE OPEN =========
+function openEnvelope() {
+  goToPage('page-question');
+}
 
-      async function updateHighscore(winner) {
-        if (!winner) return;
-        if ((winner === gameState.player_1_name && player === 'X') || (winner === gameState.player_2_name && player === 'O')) {
-          const { error } = await supabaseClient
-            .from('highscores')
-            .insert({ player_name: winner, score: 1 });
-          if (error) console.error('Highscore error:', error.message);
-        }
-        getHighscores();
-      }
+// ========= NO BUTTON ESCAPE =========
+const btnNo = document.getElementById('btnNo');
+let noRect;
+function moveNo() {
+  const row = document.getElementById('btnRow');
+  const rw = row.getBoundingClientRect();
+  const bw = btnNo.offsetWidth;
+  const bh = btnNo.offsetHeight;
+  const maxX = rw.width - bw - 10;
+  const maxY = 80;
+  const rx = Math.random() * maxX;
+  const ry = -20 + Math.random() * maxY;
+  btnNo.style.left = rx + 'px';
+  btnNo.style.top = ry + 'px';
+}
 
-      async function getHighscores() {
-        const { data, error } = await supabaseClient
-          .from('highscores')
-          .select('player_name, score')
-          .order('score', { ascending: false })
-          .limit(10);
-        if (error) console.error('Highscore fetch error:', error.message);
-        else {
-          document.getElementById('leaderboard').innerHTML = data
-            .map((entry, index) => <li>${index + 1}. ${entry.player_name}: ${entry.score}</li>)
-            .join('');
-        }
-      }
+// ========= VENUE =========
+let selectedVenueCard = null;
+function selectVenue(el, icon, name, desc) {
+  if (selectedVenueCard) selectedVenueCard.classList.remove('selected');
+  el.classList.add('selected');
+  selectedVenueCard = el;
+  state.venue = name;
+  state.venueIcon = icon;
+  document.getElementById('btnVenueNext').disabled = false;
+}
 
-      function startGame() {
-        setInterval(() => {
-          if (gameState && gameState.status === 'active') updateBall();
-          updateGame();
-        }, 1000 / 60);
-      }
+// ========= DATE & TIME =========
+function checkDateTime() {
+  const d = document.getElementById('dateInput').value;
+  const t = document.getElementById('timeInput').value;
+  state.date = d;
+  if (t) {
+    const [hh, mm] = t.split(':');
+    const h = parseInt(hh);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    state.time = `${h12}:${mm} ${ampm}`;
+  } else {
+    state.time = null;
+  }
+  document.getElementById('btnDateNext').disabled = !(d && t);
+}
 
-      canvas.addEventListener('mousemove', e => {
-        const y = e.offsetY - PADDLE_HEIGHT / 2;
-        if (y >= 0 && y <= canvas.height - PADDLE_HEIGHT) updatePaddle(y);
-      });
+// ========= SNACKS & DRINKS =========
+function toggleChip(el, type) {
+  el.classList.toggle('selected');
+  const text = el.textContent.trim();
+  if (type === 'snack') {
+    if (el.classList.contains('selected')) state.snacks.push(text);
+    else state.snacks = state.snacks.filter(x => x !== text);
+  } else {
+    if (el.classList.contains('selected')) state.drinks.push(text);
+    else state.drinks = state.drinks.filter(x => x !== text);
+  }
+}
 
-      // Expose these globally so buttons can call them
-      window.createGame = createGame;
-      window.joinGame = joinGame;
+// ========= BUILD CONFIRM =========
+function buildConfirm() {
+  const d = state.date ? new Date(state.date + 'T12:00:00').toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' }) : '—';
+  document.getElementById('c-icon').textContent = state.venueIcon || '🎳';
+  document.getElementById('c-venue').textContent = state.venue || '—';
+  document.getElementById('c-date').textContent = d;
+  document.getElementById('c-time').textContent = state.time || '—';
+  document.getElementById('c-snacks').textContent = state.snacks.length ? state.snacks.join(', ') : 'None selected';
+  document.getElementById('c-drinks').textContent = state.drinks.length ? state.drinks.join(', ') : 'None selected';
+  goToPage('page-confirm');
+}
 
-      getHighscores();
+// ========= FINAL CONFIRM + EMAIL =========
+async function finalConfirm() {
+  const btn = document.getElementById('btnConfirm');
+  const status = document.getElementById('sendStatus');
+  btn.disabled = true;
+  btn.textContent = '💌 Sending...';
+  status.textContent = '';
+
+  const d = state.date ? new Date(state.date + 'T12:00:00').toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' }) : '—';
+
+  try {
+    await emailjs.send('service_6u1g8h8', 'template_2s76dqe', {
+      venue:  state.venue  || '—',
+      date:   d,
+      time:   state.time   || '—',
+      snacks: state.snacks.length ? state.snacks.join(', ') : 'None selected',
+      drinks: state.drinks.length ? state.drinks.join(', ') : 'None selected',
     });
-  </script>
+    launchConfetti();
+    setTimeout(() => goToPage('page-final'), 400);
+  } catch (err) {
+    console.error('EmailJS error:', err);
+    btn.disabled = false;
+    btn.textContent = '💌 Confirm Our Date Night!';
+    status.textContent = '⚠️ Hmm, something went wrong. Please try again!';
+  }
+}
+
+// ========= CONFETTI =========
+function launchConfetti() {
+  const colors = ['#c8415a','#f2c4ce','#c9974a','#fce4ec','#ff85a1','#fff0a0'];
+  for (let i = 0; i < 80; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti-piece';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.top = '-10px';
+    c.style.background = colors[Math.floor(Math.random() * colors.length)];
+    c.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    c.style.animationDelay = (Math.random() * 0.8) + 's';
+    c.style.animationDuration = (1.5 + Math.random() * 1.5) + 's';
+    c.style.width = c.style.height = (6 + Math.random() * 8) + 'px';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 3500);
+  }
+}
+
+// ========= PAGE NAVIGATION =========
+const pageOrder = ['page-question','page-venue','page-datetime','page-snacks','page-confirm','page-final'];
+function goToPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const idx = pageOrder.indexOf(id);
+  const dots = document.querySelectorAll('.progress-dot');
+  const dotsWrap = document.getElementById('progressDots');
+
+  if (id === 'page-envelope' || id === 'page-final') {
+    dotsWrap.style.display = 'none';
+  } else {
+    dotsWrap.style.display = 'flex';
+    dots.forEach((d, i) => {
+      d.classList.toggle('active', i === idx);
+    });
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
 </body>
 </html>
